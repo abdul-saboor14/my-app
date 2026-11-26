@@ -7,45 +7,61 @@ import {
   UtensilsCrossed,
   ArrowRight,
   UserRound,
+  ShoppingBag,
+  ReceiptText,
 } from "lucide-react";
 
 import AuthForm from "@/components/AuthForm";
 import { AccountHeader } from "@/components/AuthLayout";
 import { requireUser } from "@/lib/auth";
 
+const actions = [
+  {
+    title: "Book a Table",
+    description:
+      "Reserve your preferred dining table at Savoria.",
+    href: "/book-table",
+    icon: CalendarDays,
+  },
+  {
+    title: "My Reservations",
+    description:
+      "View your upcoming and previous table bookings.",
+    href: "/account/reservations",
+    icon: ClipboardList,
+  },
+  {
+    title: "Order Food",
+    description:
+      "Choose delicious dishes and place a dine-in order.",
+    href: "/order",
+    icon: ShoppingBag,
+  },
+  {
+    title: "My Orders",
+    description:
+      "Track your food orders and review order history.",
+    href: "/account/orders",
+    icon: ReceiptText,
+  },
+  {
+    title: "Explore Our Menu",
+    description:
+      "Discover our selection of freshly prepared dishes.",
+    href: "/#menu",
+    icon: UtensilsCrossed,
+  },
+  {
+    title: "Account Settings",
+    description:
+      "Update your profile and change your password.",
+    href: "/account/settings",
+    icon: Settings,
+  },
+];
+
 export default async function AccountPage() {
   const user = await requireUser();
-
-  const actions = [
-    {
-      title: "Book a Table",
-      description:
-        "Reserve your favourite dining spot at Savoria.",
-      href: "/book-table",
-      icon: CalendarDays,
-    },
-    {
-      title: "My Reservations",
-      description:
-        "View your upcoming and previous reservations.",
-      href: "/account/reservations",
-      icon: ClipboardList,
-    },
-    {
-      title: "Explore Our Menu",
-      description:
-        "Discover our selection of freshly prepared dishes.",
-      href: "/#menu",
-      icon: UtensilsCrossed,
-    },
-    {
-      title: "Account Settings",
-      description:
-        "Update your profile and change your password.",
-      href: "/account/settings",
-      icon: Settings,
-    },
-  ];
 
   return (
     <>
@@ -55,12 +71,13 @@ export default async function AccountPage() {
         style={{
           minHeight: "100vh",
           background: "#F6F0E8",
-          padding: "70px 20px",
+          padding: "70px 20px 100px",
+          color: "#291E18",
         }}
       >
         <div
           style={{
-            maxWidth: 1050,
+            maxWidth: 1100,
             margin: "0 auto",
           }}
         >
@@ -80,7 +97,6 @@ export default async function AccountPage() {
               fontFamily: "Georgia, serif",
               fontSize: "clamp(36px, 6vw, 58px)",
               marginTop: 14,
-              color: "#291E18",
             }}
           >
             Welcome, {user.fullName}
@@ -93,8 +109,8 @@ export default async function AccountPage() {
               lineHeight: 1.8,
             }}
           >
-            Your personal dining experience starts here.
-            Manage your reservations, explore our menu,
+            Manage your table reservations, place
+            food orders, track your dining history,
             and customise your account.
           </p>
 
@@ -102,7 +118,7 @@ export default async function AccountPage() {
             style={{
               display: "grid",
               gridTemplateColumns:
-                "repeat(auto-fit, minmax(240px, 1fr))",
+                "repeat(auto-fit, minmax(260px, 1fr))",
               gap: 20,
               marginTop: 45,
             }}
@@ -119,12 +135,12 @@ export default async function AccountPage() {
                     border: "1px solid #E5DACE",
                     borderRadius: 15,
                     padding: 28,
-                    color: "#291E18",
                     textDecoration: "none",
+                    color: "#291E18",
                     display: "flex",
                     flexDirection: "column",
                     gap: 15,
-                    minHeight: 225,
+                    minHeight: 235,
                   }}
                 >
                   <div
@@ -162,23 +178,24 @@ export default async function AccountPage() {
 
                   <span
                     style={{
-                      color: "#B96547",
                       display: "flex",
                       alignItems: "center",
                       gap: 8,
                       marginTop: "auto",
                       fontSize: 13,
                       fontWeight: 700,
+                      color: "#B96547",
                     }}
                   >
-                    Open <ArrowRight size={16} />
+                    Open Section
+                    <ArrowRight size={16} />
                   </span>
                 </Link>
               );
             })}
           </div>
 
-          <div
+          <section
             style={{
               background: "#FFFCF7",
               border: "1px solid #E5DACE",
@@ -217,7 +234,7 @@ export default async function AccountPage() {
             <div style={{ marginTop: 25 }}>
               <AuthForm action="logout" />
             </div>
-          </div>
+          </section>
         </div>
       </main>
     </>
