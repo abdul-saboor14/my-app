@@ -1,3 +1,4 @@
+import { adminWriteDenied, unavailable } from "@/lib/auth-http";
 import { NextResponse } from "next/server";
 import { getDatabase } from "@/lib/db";
 import { validateMenuInput } from "@/lib/validation";
@@ -29,8 +30,8 @@ export async function GET() {
       { items: rows as MenuItem[] },
       { status: 200, headers }
     );
-  } catch (error) {
-    console.error("GET /api/menu failed:", error);
+  } catch {
+    console.error("GET /api/menu failed.");
 
     return NextResponse.json(
       {
@@ -44,6 +45,13 @@ export async function GET() {
 
 // POST: Add a new menu item to NeonDB
 export async function POST(request: Request) {
+  try {
+    const denied = await adminWriteDenied(request);
+    if (denied) return denied;
+  } catch {
+    return unavailable();
+  }
+
   let body: unknown;
 
   try {
@@ -91,8 +99,8 @@ export async function POST(request: Request) {
       { item: rows[0] as MenuItem },
       { status: 201, headers }
     );
-  } catch (error) {
-    console.error("POST /api/menu failed:", error);
+  } catch {
+    console.error("POST /api/menu failed.");
 
     return NextResponse.json(
       {

@@ -114,12 +114,6 @@ Make sure Node.js and npm are installed.
 npm install
 ```
 
-If the required dependencies are missing, install them using:
-
-```bash
-npm install @neondatabase/serverless lucide-react motion server-only
-```
-
 ### 3. Configure NeonDB
 
 1. Visit [Neon Console](https://console.neon.tech/).
@@ -136,19 +130,9 @@ CREATE TABLE IF NOT EXISTS menu_items (
 );
 ```
 
-### 4. Configure Environment Variables
+### 4. Configure Authentication and Environment Variables
 
-Create a `.env.local` file in the root directory, alongside `package.json`.
-
-Add:
-
-```env
-DATABASE_URL="your_neondb_connection_string"
-```
-
-Replace the placeholder with your actual Neon connection string.
-
-**Security:** Never commit `.env.local` or expose your database credentials in frontend code.
+Use [Savoria authentication setup](database/AUTHENTICATION.md) to apply the auth migration and set the server variables from `.env.example` in `.env.local`. Keep `.env.local` out of version control.
 
 ### 5. Run the Development Server
 
@@ -197,7 +181,7 @@ Example response:
 
 ### POST `/api/menu`
 
-Creates a new menu item.
+Creates a new menu item. Requires an administrator session and a trusted request origin.
 
 Example request:
 
@@ -213,7 +197,7 @@ Returns HTTP `201 Created` when successful.
 
 ### DELETE `/api/menu/[id]`
 
-Deletes the menu item associated with the supplied ID.
+Deletes the menu item associated with the supplied ID. Requires an administrator session and a trusted request origin.
 
 Example:
 
@@ -296,7 +280,7 @@ Add screenshots of your completed website to the `public/screenshots` folder.
 - API errors return appropriate HTTP status codes.
 - Delete operations require user confirmation.
 
-**Academic project note:** Menu management endpoints are publicly accessible in this demonstration. A production restaurant website should protect these endpoints with staff authentication and authorization.
+Guests can browse the menu. Administrators manage dishes at `/admin/menu` after signing in.
 
 ## 🎓 Learning Outcomes
 

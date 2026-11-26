@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { ArrowUpRight, Menu, X } from "lucide-react";
 
@@ -29,6 +30,7 @@ export default function Navbar() {
         </a>
 
         <div className="nav-links desktop-nav">
+          <Link href="/account" onClick={() => setOpen(false)}>Account</Link>
           {links.map((link) => (
             <a href={link.href} key={link.href}>
               {link.label}
@@ -58,6 +60,7 @@ export default function Navbar() {
 
       {open && (
         <div id="mobile-navigation" className="mobile-nav">
+          <Link href="/account" onClick={() => setOpen(false)}>Account</Link>
           {links.map((link) => (
             <a
               href={link.href}

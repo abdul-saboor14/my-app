@@ -57,7 +57,15 @@ const money = new Intl.NumberFormat("en-PK", {
   maximumFractionDigits: 2,
 });
 
-export default function MenuManager() {
+async function fetchMenu(signal?: AbortSignal): Promise<MenuItem[]> {
+  const response = await fetch("/api/menu", { cache: "no-store", signal });
+  const data = await readJson(response);
+  if (!response.ok) throw new Error(errorMessage(data, "Unable to load the menu."));
+  if (!Array.isArray(data.items)) throw new Error("Unexpected response from the menu API.");
+  return data.items as MenuItem[];
+}
+
+export default function MenuManager({ editable = false }: { editable?: boolean }) {
   const [items, setItems] = useState<MenuItem[]>([]);
 
   const [loading, setLoading] = useState(true);
@@ -105,58 +113,26 @@ export default function MenuManager() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  // Fetch all menu items from NeonDB
-  const loadMenu = useCallback(
-    async (signal?: AbortSignal) => {
-      setLoading(true);
-      setLoadError("");
-
-      try {
-        const response = await fetch("/api/menu", {
-          cache: "no-store",
-          signal,
-        });
-
-        const data = await readJson(response);
-
-        if (!response.ok) {
-          throw new Error(
-            errorMessage(
-              data,
-              "Unable to load the menu."
-            )
-          );
-        }
-
-        if (!Array.isArray(data.items)) {
-          throw new Error(
-            "Unexpected response from the menu API."
-          );
-        }
-
-        setItems(data.items as MenuItem[]);
-      } catch (error) {
+  const loadMenu = useCallback((signal?: AbortSignal) => {
+    void fetchMenu(signal).then(
+      (menuItems) => {
         if (signal?.aborted) return;
-
-        setLoadError(
-          error instanceof Error
-            ? error.message
-            : "Unable to load the menu."
-        );
-      } finally {
-        if (!signal?.aborted) {
-          setLoading(false);
-        }
+        setItems(menuItems);
+        setLoading(false);
+      },
+      (error: unknown) => {
+        if (signal?.aborted) return;
+        setLoadError(error instanceof Error ? error.message : "Unable to load the menu.");
+        setLoading(false);
       }
-    },
-    []
-  );
+    );
+  }, []);
 
   // Load the menu when the page opens
   useEffect(() => {
     const controller = new AbortController();
 
-    void loadMenu(controller.signal);
+    loadMenu(controller.signal);
 
     return () => controller.abort();
   }, [loadMenu]);
@@ -350,13 +326,15 @@ export default function MenuManager() {
             </h3>
           </div>
 
-          <a
-            href="#add-item"
-            className="text-link"
-          >
-            Add a new dish
-            <ArrowUpRight size={18} />
-          </a>
+          {editable && (
+            <a
+              href="#add-item"
+              className="text-link"
+            >
+              Add a new dish
+              <ArrowUpRight size={18} />
+            </a>
+          )}
         </div>
 
         {/* Loading skeletons */}
@@ -395,7 +373,11 @@ export default function MenuManager() {
             <button
               className="button button-primary"
               type="button"
-              onClick={() => void loadMenu()}
+              onClick={() => {
+                setLoading(true);
+                setLoadError("");
+                loadMenu();
+              }}
             >
               <RefreshCw size={17} />
               Try again
@@ -412,17 +394,15 @@ export default function MenuManager() {
 
             <p>
               No dishes have been added yet.
-              Add your first creation below
-              and it will appear here.
+              {editable ? " Add your first dish below." : " Check back soon."}
             </p>
 
-            <a
-              href="#add-item"
-              className="button button-primary"
-            >
-              Add the first dish
-              <Plus size={17} />
-            </a>
+            {editable && (
+              <a href="#add-item" className="button button-primary">
+                Add the first dish
+                <Plus size={17} />
+              </a>
+            )}
           </div>
         ) : (
           // Dynamic menu cards from NeonDB
@@ -477,17 +457,19 @@ export default function MenuManager() {
                 <div className="card-bottom">
                   <span>CRAFTED FOR YOU</span>
 
-                  <button
-                    className="remove-button"
-                    type="button"
-                    aria-label={`Delete ${item.name}`}
-                    onClick={() =>
-                      setSelectedItem(item)
-                    }
-                  >
-                    <Trash2 size={16} />
-                    Remove
-                  </button>
+                  {editable && (
+                    <button
+                      className="remove-button"
+                      type="button"
+                      aria-label={`Delete ${item.name}`}
+                      onClick={() =>
+                        setSelectedItem(item)
+                      }
+                    >
+                      <Trash2 size={16} />
+                      Remove
+                    </button>
+                  )}
                 </div>
               </motion.article>
             ))}
@@ -495,165 +477,169 @@ export default function MenuManager() {
         )}
 
         {/* Add new menu item */}
-        <div
-          id="add-item"
-          className="add-section"
-        >
-          <div className="add-intro">
-            <span className="section-overline">
-              CURATE THE MENU
-            </span>
-
-            <h3>
-              Add something <em>delicious.</em>
-            </h3>
-
-            <p>
-              Have a new favorite in mind?
-              Give it a name, set the price,
-              and tell us what makes it special.
-            </p>
-
-            <div
-              className="add-illustration"
-              aria-hidden="true"
-            >
-              <ChefHat
-                size={76}
-                strokeWidth={0.8}
-              />
-
-              <span>MADE WITH HEART</span>
-            </div>
-          </div>
-
-          <form
-            className="add-form"
-            onSubmit={(event) =>
-              void handleAdd(event)
-            }
-            noValidate
+        {editable && (
+          <div
+            id="add-item"
+            className="add-section"
           >
-            <div className="form-label-heading">
-              NEW MENU ITEM
-              <span>✳</span>
-            </div>
+            <div className="add-intro">
+              <span className="section-overline">
+                CURATE THE MENU
+              </span>
 
-            {/* Name */}
-            <div className="field">
-              <label htmlFor="dish-name">
-                Dish name <span>*</span>
-              </label>
+              <h3>
+                Add something <em>delicious.</em>
+              </h3>
 
-              <input
-                id="dish-name"
-                type="text"
-                value={name}
-                onChange={(e) =>
-                  setName(e.target.value)
-                }
-                placeholder="e.g. Truffle Mushroom Risotto"
-                required
-                maxLength={100}
-                disabled={adding}
-              />
-            </div>
+              <p>
+                Have a new favorite in mind?
+                Give it a name, set the price,
+                and tell us what makes it special.
+              </p>
 
-            {/* Price */}
-            <div className="field">
-              <label htmlFor="dish-price">
-                Price (PKR) <span>*</span>
-              </label>
-
-              <div className="price-field">
-                <span>Rs.</span>
-
-                <input
-                  id="dish-price"
-                  type="number"
-                  value={price}
-                  onChange={(e) =>
-                    setPrice(e.target.value)
-                  }
-                  min="0.01"
-                  max="99999999.99"
-                  step="0.01"
-                  placeholder="1250.00"
-                  required
-                  disabled={adding}
+              <div
+                className="add-illustration"
+                aria-hidden="true"
+              >
+                <ChefHat
+                  size={76}
+                  strokeWidth={0.8}
                 />
+
+                <span>MADE WITH HEART</span>
               </div>
             </div>
 
-            {/* Description */}
-            <div className="field">
-              <label htmlFor="dish-description">
-                Description <span>*</span>
-              </label>
-
-              <textarea
-                id="dish-description"
-                value={description}
-                onChange={(e) =>
-                  setDescription(e.target.value)
-                }
-                placeholder="A few delicious details about this dish..."
-                rows={4}
-                required
-                maxLength={500}
-                disabled={adding}
-              />
-            </div>
-
-            {/* Validation error */}
-            {formError && (
-              <p
-                className="form-error"
-                role="alert"
-              >
-                <CircleAlert size={17} />
-                {formError}
-              </p>
-            )}
-
-            {/* Submit button */}
-            <button
-              type="submit"
-              className="button button-primary form-submit"
-              disabled={adding}
+            <form
+              className="add-form"
+              onSubmit={(event) =>
+                void handleAdd(event)
+              }
+              noValidate
             >
-              {adding
-                ? "Adding your dish..."
-                : "Add Menu Item"}
+              <div className="form-label-heading">
+                NEW MENU ITEM
+                <span>✳</span>
+              </div>
 
-              {adding ? (
-                <span className="small-spinner" />
-              ) : (
-                <Plus size={19} />
+              {/* Name */}
+              <div className="field">
+                <label htmlFor="dish-name">
+                  Dish name <span>*</span>
+                </label>
+
+                <input
+                  id="dish-name"
+                  type="text"
+                  value={name}
+                  onChange={(e) =>
+                    setName(e.target.value)
+                  }
+                  placeholder="e.g. Truffle Mushroom Risotto"
+                  required
+                  maxLength={100}
+                  disabled={adding}
+                />
+              </div>
+
+              {/* Price */}
+              <div className="field">
+                <label htmlFor="dish-price">
+                  Price (PKR) <span>*</span>
+                </label>
+
+                <div className="price-field">
+                  <span>Rs.</span>
+
+                  <input
+                    id="dish-price"
+                    type="number"
+                    value={price}
+                    onChange={(e) =>
+                      setPrice(e.target.value)
+                    }
+                    min="0.01"
+                    max="99999999.99"
+                    step="0.01"
+                    placeholder="1250.00"
+                    required
+                    disabled={adding}
+                  />
+                </div>
+              </div>
+
+              {/* Description */}
+              <div className="field">
+                <label htmlFor="dish-description">
+                  Description <span>*</span>
+                </label>
+
+                <textarea
+                  id="dish-description"
+                  value={description}
+                  onChange={(e) =>
+                    setDescription(e.target.value)
+                  }
+                  placeholder="A few delicious details about this dish..."
+                  rows={4}
+                  required
+                  maxLength={500}
+                  disabled={adding}
+                />
+              </div>
+
+              {/* Validation error */}
+              {formError && (
+                <p
+                  className="form-error"
+                  role="alert"
+                >
+                  <CircleAlert size={17} />
+                  {formError}
+                </p>
               )}
-            </button>
 
-            <p className="form-note">
-              All changes are saved to the
-              restaurant database.
-            </p>
-          </form>
-        </div>
+              {/* Submit button */}
+              <button
+                type="submit"
+                className="button button-primary form-submit"
+                disabled={adding}
+              >
+                {adding
+                  ? "Adding your dish..."
+                  : "Add Menu Item"}
+
+                {adding ? (
+                  <span className="small-spinner" />
+                ) : (
+                  <Plus size={19} />
+                )}
+              </button>
+
+              <p className="form-note">
+                All changes are saved to the
+                restaurant database.
+              </p>
+            </form>
+          </div>
+        )}
       </div>
 
       {/* Delete confirmation */}
-      <ConfirmDialog
-        item={selectedItem}
-        busy={deleting}
-        onCancel={() => {
-          if (!deleting) {
-            setSelectedItem(null);
+      {editable && (
+        <ConfirmDialog
+          item={selectedItem}
+          busy={deleting}
+          onCancel={() => {
+            if (!deleting) {
+              setSelectedItem(null);
+            }
+          }}
+          onConfirm={() =>
+            void handleDelete()
           }
-        }}
-        onConfirm={() =>
-          void handleDelete()
-        }
-      />
+        />
+      )}
 
       {/* Toast notification */}
       {toast && (

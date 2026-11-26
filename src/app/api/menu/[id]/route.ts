@@ -1,3 +1,4 @@
+import { adminWriteDenied, unavailable } from "@/lib/auth-http";
 import { NextResponse } from "next/server";
 import { getDatabase } from "@/lib/db";
 
@@ -5,11 +6,18 @@ export const runtime = "nodejs";
 
 // DELETE: Remove a menu item from NeonDB
 export async function DELETE(
-  _request: Request,
+  request: Request,
   context: {
     params: Promise<{ id: string }>;
   }
 ) {
+  try {
+    const denied = await adminWriteDenied(request);
+    if (denied) return denied;
+  } catch {
+    return unavailable();
+  }
+
   const { id } = await context.params;
 
   // Validate the provided ID
@@ -58,8 +66,8 @@ export async function DELETE(
         headers: { "Cache-Control": "no-store" },
       }
     );
-  } catch (error) {
-    console.error("DELETE failed:", error);
+  } catch {
+    console.error("DELETE failed.");
 
     return NextResponse.json(
       {
