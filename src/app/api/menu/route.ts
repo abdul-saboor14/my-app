@@ -1,5 +1,6 @@
-import { adminWriteDenied, unavailable } from "@/lib/auth-http";
+
 import { NextResponse } from "next/server";
+import { adminWriteDenied, unavailable } from "@/lib/auth-http";
 import { getDatabase } from "@/lib/db";
 import { validateMenuInput } from "@/lib/validation";
 import type { MenuItem } from "@/types/menu";
@@ -11,7 +12,6 @@ const headers = {
   "Cache-Control": "no-store",
 };
 
-// GET: Retrieve all menu items from NeonDB
 export async function GET() {
   try {
     const sql = getDatabase();
@@ -28,22 +28,18 @@ export async function GET() {
 
     return NextResponse.json(
       { items: rows as MenuItem[] },
-      { status: 200, headers }
+      { headers }
     );
-  } catch {
-    console.error("GET /api/menu failed.");
+  } catch (error) {
+    console.error("Menu GET error:", error);
 
     return NextResponse.json(
-      {
-        error:
-          "Unable to load the menu. Please check the database connection.",
-      },
+      { error: "Unable to load menu items." },
       { status: 503, headers }
     );
   }
 }
 
-// POST: Add a new menu item to NeonDB
 export async function POST(request: Request) {
   try {
     const denied = await adminWriteDenied(request);
@@ -72,10 +68,10 @@ export async function POST(request: Request) {
     );
   }
 
+  const { name, price, description } = validation.data;
+
   try {
     const sql = getDatabase();
-
-    const { name, price, description } = validation.data;
 
     const rows = await sql`
       INSERT INTO menu_items (
@@ -99,15 +95,24 @@ export async function POST(request: Request) {
       { item: rows[0] as MenuItem },
       { status: 201, headers }
     );
-  } catch {
-    console.error("POST /api/menu failed.");
+  } catch (error: unknown) {
+    const code =
+      error && typeof error === "object" && "code" in error
+        ? String(error.code)
+        : "";
+
+    if (code === "23505") {
+      return NextResponse.json(
+        { error: "A dish with this name already exists." },
+        { status: 409 }
+      );
+    }
+
+    console.error("Menu INSERT failed:", error);
 
     return NextResponse.json(
-      {
-        error:
-          "Could not add the dish. Please try again.",
-      },
-      { status: 503, headers }
+      { error: "Could not add the dish. Check server logs." },
+      { status: 503 }
     );
   }
 }

@@ -1,11 +1,12 @@
+
 "use client";
 
 import {
-  FormEvent,
   useCallback,
   useEffect,
   useRef,
   useState,
+  type FormEvent,
 } from "react";
 
 import { motion } from "motion/react";
@@ -15,10 +16,12 @@ import {
   CheckCircle2,
   ChefHat,
   CircleAlert,
+  Pencil,
   Plus,
   RefreshCw,
   Trash2,
   X,
+  Save,
 } from "lucide-react";
 
 import type { MenuItem } from "@/types/menu";
@@ -30,14 +33,16 @@ type Toast = {
   type: "success" | "error";
 };
 
+const money = new Intl.NumberFormat("en-PK", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
 async function readJson(
   response: Response
 ): Promise<Record<string, unknown>> {
   try {
-    return (await response.json()) as Record<
-      string,
-      unknown
-    >;
+    return (await response.json()) as Record<string, unknown>;
   } catch {
     return {};
   }
@@ -52,42 +57,41 @@ function errorMessage(
     : fallback;
 }
 
-const money = new Intl.NumberFormat("en-PK", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
-async function fetchMenu(signal?: AbortSignal): Promise<MenuItem[]> {
-  const response = await fetch("/api/menu", { cache: "no-store", signal });
-  const data = await readJson(response);
-  if (!response.ok) throw new Error(errorMessage(data, "Unable to load the menu."));
-  if (!Array.isArray(data.items)) throw new Error("Unexpected response from the menu API.");
-  return data.items as MenuItem[];
-}
-
-export default function MenuManager({ editable = false }: { editable?: boolean }) {
+export default function MenuManager({
+  editable = false,
+}: {
+  editable?: boolean;
+}) {
   const [items, setItems] = useState<MenuItem[]>([]);
-
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
+  // Add dish form
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
-
   const [adding, setAdding] = useState(false);
   const [formError, setFormError] = useState("");
 
-  const [deleting, setDeleting] = useState(false);
-
-  const [selectedItem, setSelectedItem] =
+  // Edit dish form
+  const [editingItem, setEditingItem] =
     useState<MenuItem | null>(null);
 
-  const [toast, setToast] = useState<Toast | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editPrice, setEditPrice] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState("");
 
+  // Delete dialog
+  const [selectedItem, setSelectedItem] =
+    useState<MenuItem | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  // Notifications
+  const [toast, setToast] = useState<Toast | null>(null);
   const toastId = useRef(0);
 
-  // Display a notification
   const notify = useCallback(
     (
       message: string,
@@ -102,42 +106,152 @@ export default function MenuManager({ editable = false }: { editable?: boolean }
     []
   );
 
-  // Automatically dismiss notifications
   useEffect(() => {
     if (!toast) return;
 
-    const timer = window.setTimeout(() => {
-      setToast(null);
-    }, 4400);
+    const timer = window.setTimeout(
+      () => setToast(null),
+      4400
+    );
 
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  const loadMenu = useCallback((signal?: AbortSignal) => {
-    void fetchMenu(signal).then(
-      (menuItems) => {
-        if (signal?.aborted) return;
-        setItems(menuItems);
-        setLoading(false);
-      },
-      (error: unknown) => {
-        if (signal?.aborted) return;
-        setLoadError(error instanceof Error ? error.message : "Unable to load the menu.");
-        setLoading(false);
-      }
-    );
-  }, []);
+  const loadMenu = useCallback(
+    async (signal?: AbortSignal) => {
+      try {
+        const response = await fetch("/api/menu", {
+          cache: "no-store",
+          signal,
+        });
 
-  // Load the menu when the page opens
+        const data = await readJson(response);
+
+        if (!response.ok) {
+          throw new Error(
+            errorMessage(data, "Unable to load menu.")
+          );
+        }
+
+        if (!Array.isArray(data.items)) {
+          throw new Error("Unexpected menu response.");
+        }
+
+        if (!signal?.aborted) {
+          setItems(data.items as MenuItem[]);
+          setLoadError("");
+        }
+      } catch (error) {
+        if (signal?.aborted) return;
+
+        setLoadError(
+          error instanceof Error
+            ? error.message
+            : "Unable to load menu."
+        );
+      } finally {
+        if (!signal?.aborted) {
+          setLoading(false);
+        }
+      }
+    },
+    []
+  );
+
   useEffect(() => {
     const controller = new AbortController();
 
-    loadMenu(controller.signal);
+    void loadMenu(controller.signal);
 
     return () => controller.abort();
   }, [loadMenu]);
 
-  // Add a menu item
+  // OPEN EDIT FORM
+  function startEdit(item: MenuItem) {
+    setEditingItem(item);
+    setEditName(item.name);
+    setEditPrice(String(item.price));
+    setEditDescription(item.description);
+    setEditError("");
+  }
+
+  // SAVE EDITED DISH
+  async function handleEdit(
+    event: FormEvent<HTMLFormElement>
+  ) {
+    event.preventDefault();
+
+    if (!editingItem || saving) return;
+
+    setEditError("");
+
+    const numericPrice = Number(editPrice);
+
+    if (
+      !editName.trim() ||
+      !editDescription.trim() ||
+      !editPrice.trim() ||
+      !Number.isFinite(numericPrice) ||
+      numericPrice <= 0
+    ) {
+      setEditError(
+        "Enter a valid name, price and description."
+      );
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const response = await fetch(
+        `/api/menu/${editingItem.id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: editName.trim(),
+            price: editPrice,
+            description: editDescription.trim(),
+          }),
+        }
+      );
+
+      const data = await readJson(response);
+
+      if (!response.ok) {
+        throw new Error(
+          errorMessage(data, "Unable to update dish.")
+        );
+      }
+
+      const updated = data.item as MenuItem | undefined;
+
+      if (!updated) {
+        throw new Error("Updated item not returned.");
+      }
+
+      setItems((current) =>
+        current.map((item) =>
+          item.id === updated.id ? updated : item
+        )
+      );
+
+      setEditingItem(null);
+      notify("Dish updated successfully!");
+    } catch (error) {
+      setEditError(
+        error instanceof Error
+          ? error.message
+          : "Unable to save changes."
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // ADD NEW DISH
   async function handleAdd(
     event: FormEvent<HTMLFormElement>
   ) {
@@ -147,21 +261,18 @@ export default function MenuManager({ editable = false }: { editable?: boolean }
 
     setFormError("");
 
-    const trimmedName = name.trim();
-    const trimmedDescription = description.trim();
     const numericPrice = Number(price);
 
     if (
-      !trimmedName ||
-      !trimmedDescription ||
+      !name.trim() ||
+      !description.trim() ||
       !price.trim() ||
       !Number.isFinite(numericPrice) ||
       numericPrice <= 0
     ) {
       setFormError(
-        "Please enter a name, positive price, and description."
+        "Enter a valid name, price and description."
       );
-
       return;
     }
 
@@ -174,9 +285,9 @@ export default function MenuManager({ editable = false }: { editable?: boolean }
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          name: trimmedName,
+          name: name.trim(),
           price,
-          description: trimmedDescription,
+          description: description.trim(),
         }),
       });
 
@@ -184,87 +295,66 @@ export default function MenuManager({ editable = false }: { editable?: boolean }
 
       if (!response.ok) {
         throw new Error(
-          errorMessage(data, "Unable to add the dish.")
+          errorMessage(data, "Unable to add dish.")
         );
       }
 
-      if (!data.item) {
-        throw new Error(
-          "The server did not return the new dish."
-        );
+      const newItem = data.item as MenuItem | undefined;
+
+      if (!newItem) {
+        throw new Error("New item not returned.");
       }
 
-      const newItem = data.item as MenuItem;
-
-      // Immediately update the visible menu
-      setItems((current) => [
-        newItem,
-        ...current,
-      ]);
-
+      setItems((current) => [newItem, ...current]);
       setName("");
       setPrice("");
       setDescription("");
-      setLoadError("");
 
-      notify(
-        "Your new dish has been added to the menu!"
-      );
+      notify("Dish added successfully!");
     } catch (error) {
-      const message =
+      setFormError(
         error instanceof Error
           ? error.message
-          : "Unable to add the dish.";
-
-      setFormError(message);
-      notify(message, "error");
+          : "Unable to add dish."
+      );
     } finally {
       setAdding(false);
     }
   }
 
-  // Delete the selected item
+  // DELETE DISH
   async function handleDelete() {
     if (!selectedItem || deleting) return;
-
-    const id = selectedItem.id;
 
     setDeleting(true);
 
     try {
       const response = await fetch(
-        `/api/menu/${id}`,
-        {
-          method: "DELETE",
-        }
+        `/api/menu/${selectedItem.id}`,
+        { method: "DELETE" }
       );
 
       const data = await readJson(response);
 
       if (!response.ok) {
         throw new Error(
-          errorMessage(
-            data,
-            "Unable to remove the dish."
-          )
+          errorMessage(data, "Unable to delete dish.")
         );
       }
 
-      // Remove the card immediately
       setItems((current) =>
-        current.filter((item) => item.id !== id)
+        current.filter(
+          (item) => item.id !== selectedItem.id
+        )
       );
 
       setSelectedItem(null);
-
-      notify(
-        "Dish successfully removed from the menu."
-      );
+      notify("Dish removed successfully!");
     } catch (error) {
       notify(
         error instanceof Error
           ? error.message
-          : "Unable to remove the dish.",
+          : "Unable to delete dish.",
         "error"
       );
     } finally {
@@ -279,7 +369,6 @@ export default function MenuManager({ editable = false }: { editable?: boolean }
       aria-labelledby="menu-title"
     >
       <div className="container-wide">
-        {/* Section heading */}
         <motion.div
           className="section-intro centered"
           initial={{ opacity: 0, y: 25 }}
@@ -306,7 +395,6 @@ export default function MenuManager({ editable = false }: { editable?: boolean }
           </p>
         </motion.div>
 
-        {/* Menu heading */}
         <div className="menu-heading-row">
           <div>
             <span className="section-overline">
@@ -317,27 +405,20 @@ export default function MenuManager({ editable = false }: { editable?: boolean }
               Explore our dishes{" "}
               <span className="menu-count">
                 {!loading && !loadError
-                  ? String(items.length).padStart(
-                      2,
-                      "0"
-                    )
+                  ? String(items.length).padStart(2, "0")
                   : "—"}
               </span>
             </h3>
           </div>
 
           {editable && (
-            <a
-              href="#add-item"
-              className="text-link"
-            >
+            <a href="#add-item" className="text-link">
               Add a new dish
               <ArrowUpRight size={18} />
             </a>
           )}
         </div>
 
-        {/* Loading skeletons */}
         {loading ? (
           <div
             className="menu-grid"
@@ -345,10 +426,7 @@ export default function MenuManager({ editable = false }: { editable?: boolean }
             aria-busy="true"
           >
             {[0, 1, 2].map((n) => (
-              <div
-                className="menu-card skeleton-card"
-                key={n}
-              >
+              <div className="menu-card skeleton-card" key={n}>
                 <div className="skeleton skeleton-icon" />
                 <div className="skeleton skeleton-title" />
                 <div className="skeleton skeleton-line" />
@@ -357,17 +435,12 @@ export default function MenuManager({ editable = false }: { editable?: boolean }
             ))}
           </div>
         ) : loadError ? (
-          // Database error state
-          <div
-            className="menu-empty"
-            role="alert"
-          >
+          <div className="menu-empty" role="alert">
             <span className="empty-icon error-icon">
               <CircleAlert size={28} />
             </span>
 
             <h3>We couldn&apos;t load the menu.</h3>
-
             <p>{loadError}</p>
 
             <button
@@ -376,7 +449,7 @@ export default function MenuManager({ editable = false }: { editable?: boolean }
               onClick={() => {
                 setLoading(true);
                 setLoadError("");
-                loadMenu();
+                void loadMenu();
               }}
             >
               <RefreshCw size={17} />
@@ -384,47 +457,29 @@ export default function MenuManager({ editable = false }: { editable?: boolean }
             </button>
           </div>
         ) : items.length === 0 ? (
-          // Empty database state
           <div className="menu-empty">
             <span className="empty-icon">
               <ChefHat size={34} />
             </span>
-
             <h3>A beautiful menu starts here.</h3>
-
             <p>
               No dishes have been added yet.
-              {editable ? " Add your first dish below." : " Check back soon."}
+              {editable
+                ? " Add your first dish below."
+                : " Check back soon."}
             </p>
-
-            {editable && (
-              <a href="#add-item" className="button button-primary">
-                Add the first dish
-                <Plus size={17} />
-              </a>
-            )}
           </div>
         ) : (
-          // Dynamic menu cards from NeonDB
           <div className="menu-grid">
             {items.map((item, index) => (
               <motion.article
                 className="menu-card"
                 key={item.id}
-                initial={{
-                  opacity: 0,
-                  y: 18,
-                }}
-                animate={{
-                  opacity: 1,
-                  y: 0,
-                }}
+                initial={{ opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
                 transition={{
                   duration: 0.4,
-                  delay: Math.min(
-                    index * 0.04,
-                    0.28
-                  ),
+                  delay: Math.min(index * 0.04, 0.28),
                 }}
               >
                 <div className="menu-card-top">
@@ -458,30 +513,164 @@ export default function MenuManager({ editable = false }: { editable?: boolean }
                   <span>CRAFTED FOR YOU</span>
 
                   {editable && (
-                    <button
-                      className="remove-button"
-                      type="button"
-                      aria-label={`Delete ${item.name}`}
-                      onClick={() =>
-                        setSelectedItem(item)
-                      }
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 16,
+                        alignItems: "center",
+                        flexWrap: "wrap",
+                      }}
                     >
-                      <Trash2 size={16} />
-                      Remove
-                    </button>
+                      <button
+                        type="button"
+                        className="remove-button"
+                        style={{ color: "#54775B" }}
+                        onClick={() => startEdit(item)}
+                      >
+                        <Pencil size={15} />
+                        Edit
+                      </button>
+
+                      <button
+                        type="button"
+                        className="remove-button"
+                        onClick={() =>
+                          setSelectedItem(item)
+                        }
+                      >
+                        <Trash2 size={15} />
+                        Remove
+                      </button>
+                    </div>
                   )}
                 </div>
+
+                {/* Inline edit form */}
+                {editable &&
+                  editingItem?.id === item.id && (
+                    <form
+                      onSubmit={(event) =>
+                        void handleEdit(event)
+                      }
+                      style={{
+                        marginTop: 22,
+                        paddingTop: 20,
+                        borderTop: "1px solid #e2d9cc",
+                      }}
+                    >
+                      <h4
+                        style={{
+                          fontSize: 20,
+                          marginBottom: 18,
+                        }}
+                      >
+                        Edit this dish
+                      </h4>
+
+                      <div className="field">
+                        <label htmlFor={`edit-name-${item.id}`}>
+                          Dish name
+                        </label>
+
+                        <input
+                          id={`edit-name-${item.id}`}
+                          value={editName}
+                          onChange={(e) =>
+                            setEditName(e.target.value)
+                          }
+                          maxLength={100}
+                          disabled={saving}
+                          required
+                        />
+                      </div>
+
+                      <div className="field">
+                        <label htmlFor={`edit-price-${item.id}`}>
+                          Price (PKR)
+                        </label>
+
+                        <input
+                          id={`edit-price-${item.id}`}
+                          type="number"
+                          min="0.01"
+                          max="99999999.99"
+                          step="0.01"
+                          value={editPrice}
+                          onChange={(e) =>
+                            setEditPrice(e.target.value)
+                          }
+                          disabled={saving}
+                          required
+                        />
+                      </div>
+
+                      <div className="field">
+                        <label
+                          htmlFor={`edit-description-${item.id}`}
+                        >
+                          Description
+                        </label>
+
+                        <textarea
+                          id={`edit-description-${item.id}`}
+                          rows={3}
+                          maxLength={500}
+                          value={editDescription}
+                          onChange={(e) =>
+                            setEditDescription(e.target.value)
+                          }
+                          disabled={saving}
+                          required
+                        />
+                      </div>
+
+                      {editError && (
+                        <p className="form-error" role="alert">
+                          <CircleAlert size={17} />
+                          {editError}
+                        </p>
+                      )}
+
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 10,
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <button
+                          type="submit"
+                          className="button button-primary"
+                          disabled={saving}
+                        >
+                          <Save size={16} />
+                          {saving
+                            ? "Saving..."
+                            : "Save Changes"}
+                        </button>
+
+                        <button
+                          type="button"
+                          className="button button-outline"
+                          disabled={saving}
+                          onClick={() =>
+                            setEditingItem(null)
+                          }
+                        >
+                          <X size={16} />
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  )}
               </motion.article>
             ))}
           </div>
         )}
 
-        {/* Add new menu item */}
+        {/* Add a new dish */}
         {editable && (
-          <div
-            id="add-item"
-            className="add-section"
-          >
+          <div id="add-item" className="add-section">
             <div className="add-intro">
               <span className="section-overline">
                 CURATE THE MENU
@@ -505,7 +694,6 @@ export default function MenuManager({ editable = false }: { editable?: boolean }
                   size={76}
                   strokeWidth={0.8}
                 />
-
                 <span>MADE WITH HEART</span>
               </div>
             </div>
@@ -515,14 +703,12 @@ export default function MenuManager({ editable = false }: { editable?: boolean }
               onSubmit={(event) =>
                 void handleAdd(event)
               }
-              noValidate
             >
               <div className="form-label-heading">
                 NEW MENU ITEM
                 <span>✳</span>
               </div>
 
-              {/* Name */}
               <div className="field">
                 <label htmlFor="dish-name">
                   Dish name <span>*</span>
@@ -530,19 +716,17 @@ export default function MenuManager({ editable = false }: { editable?: boolean }
 
                 <input
                   id="dish-name"
-                  type="text"
                   value={name}
                   onChange={(e) =>
                     setName(e.target.value)
                   }
                   placeholder="e.g. Truffle Mushroom Risotto"
-                  required
                   maxLength={100}
+                  required
                   disabled={adding}
                 />
               </div>
 
-              {/* Price */}
               <div className="field">
                 <label htmlFor="dish-price">
                   Price (PKR) <span>*</span>
@@ -554,13 +738,13 @@ export default function MenuManager({ editable = false }: { editable?: boolean }
                   <input
                     id="dish-price"
                     type="number"
+                    min="0.01"
+                    max="99999999.99"
+                    step="0.01"
                     value={price}
                     onChange={(e) =>
                       setPrice(e.target.value)
                     }
-                    min="0.01"
-                    max="99999999.99"
-                    step="0.01"
                     placeholder="1250.00"
                     required
                     disabled={adding}
@@ -568,7 +752,6 @@ export default function MenuManager({ editable = false }: { editable?: boolean }
                 </div>
               </div>
 
-              {/* Description */}
               <div className="field">
                 <label htmlFor="dish-description">
                   Description <span>*</span>
@@ -576,30 +759,25 @@ export default function MenuManager({ editable = false }: { editable?: boolean }
 
                 <textarea
                   id="dish-description"
+                  rows={4}
+                  maxLength={500}
                   value={description}
                   onChange={(e) =>
                     setDescription(e.target.value)
                   }
-                  placeholder="A few delicious details about this dish..."
-                  rows={4}
+                  placeholder="Describe your dish..."
                   required
-                  maxLength={500}
                   disabled={adding}
                 />
               </div>
 
-              {/* Validation error */}
               {formError && (
-                <p
-                  className="form-error"
-                  role="alert"
-                >
+                <p className="form-error" role="alert">
                   <CircleAlert size={17} />
                   {formError}
                 </p>
               )}
 
-              {/* Submit button */}
               <button
                 type="submit"
                 className="button button-primary form-submit"
@@ -608,12 +786,7 @@ export default function MenuManager({ editable = false }: { editable?: boolean }
                 {adding
                   ? "Adding your dish..."
                   : "Add Menu Item"}
-
-                {adding ? (
-                  <span className="small-spinner" />
-                ) : (
-                  <Plus size={19} />
-                )}
+                <Plus size={19} />
               </button>
 
               <p className="form-note">
@@ -625,7 +798,7 @@ export default function MenuManager({ editable = false }: { editable?: boolean }
         )}
       </div>
 
-      {/* Delete confirmation */}
+      {/* Existing delete confirmation */}
       {editable && (
         <ConfirmDialog
           item={selectedItem}
@@ -641,7 +814,7 @@ export default function MenuManager({ editable = false }: { editable?: boolean }
         />
       )}
 
-      {/* Toast notification */}
+      {/* Notification */}
       {toast && (
         <div
           className={`toast toast-${toast.type}`}

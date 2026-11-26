@@ -1,18 +1,27 @@
+
 "use client";
 
 import Link from "next/link";
 import { useState } from "react";
-import { ArrowUpRight, Menu, X } from "lucide-react";
+import {
+  ArrowUpRight,
+  Menu,
+  X,
+  ShieldCheck,
+  UserRound,
+} from "lucide-react";
 
 const links = [
-  { href: "#home", label: "Home" },
-  { href: "#menu", label: "Our Menu" },
-  { href: "#about", label: "About" },
-  { href: "#contact", label: "Contact" },
+  { href: "/#home", label: "Home" },
+  { href: "/#menu", label: "Our Menu" },
+  { href: "/#about", label: "About" },
+  { href: "/#contact", label: "Contact" },
 ];
 
 export default function Navbar() {
   const [open, setOpen] = useState(false);
+
+  const closeMenu = () => setOpen(false);
 
   return (
     <header className="site-header">
@@ -20,36 +29,52 @@ export default function Navbar() {
         className="nav-container container-wide"
         aria-label="Main navigation"
       >
-        <a
-          href="#home"
+        {/* Savoria Logo */}
+        <Link
+          href="/"
           className="wordmark"
-          onClick={() => setOpen(false)}
+          onClick={closeMenu}
           aria-label="Savoria home"
         >
-          Savoria<span className="wordmark-dot">.</span>
-        </a>
+          Savoria
+          <span className="wordmark-dot">.</span>
+        </Link>
 
+        {/* Desktop Navigation */}
         <div className="nav-links desktop-nav">
-          <Link href="/account" onClick={() => setOpen(false)}>Account</Link>
           {links.map((link) => (
-            <a href={link.href} key={link.href}>
+            <Link href={link.href} key={link.href}>
               {link.label}
-            </a>
+            </Link>
           ))}
+
+          <Link href="/account">
+            <UserRound size={16} />
+            Customer Account
+          </Link>
+
+          <Link href="/admin/login">
+            <ShieldCheck size={16} />
+            Admin Login
+          </Link>
         </div>
 
-        <a
-          href="#menu"
+        {/* Desktop Button */}
+        <Link
+          href="/#menu"
           className="button button-small desktop-cta"
         >
           Explore Menu
           <ArrowUpRight size={16} />
-        </a>
+        </Link>
 
+        {/* Mobile Menu Button */}
         <button
           type="button"
           className="mobile-menu-toggle"
-          aria-label={open ? "Close menu" : "Open menu"}
+          aria-label={
+            open ? "Close menu" : "Open menu"
+          }
           aria-expanded={open}
           aria-controls="mobile-navigation"
           onClick={() => setOpen(!open)}
@@ -58,27 +83,46 @@ export default function Navbar() {
         </button>
       </nav>
 
+      {/* Mobile Navigation */}
       {open && (
-        <div id="mobile-navigation" className="mobile-nav">
-          <Link href="/account" onClick={() => setOpen(false)}>Account</Link>
+        <div
+          id="mobile-navigation"
+          className="mobile-nav"
+        >
           {links.map((link) => (
-            <a
+            <Link
               href={link.href}
               key={link.href}
-              onClick={() => setOpen(false)}
+              onClick={closeMenu}
             >
               {link.label}
-            </a>
+            </Link>
           ))}
 
-          <a
-            href="#menu"
+          <Link
+            href="/account"
+            onClick={closeMenu}
+          >
+            <UserRound size={18} />
+            Customer Account
+          </Link>
+
+          <Link
+            href="/admin/login"
+            onClick={closeMenu}
+          >
+            <ShieldCheck size={18} />
+            Admin Login
+          </Link>
+
+          <Link
+            href="/#menu"
             className="button"
-            onClick={() => setOpen(false)}
+            onClick={closeMenu}
           >
             Explore Menu
             <ArrowUpRight size={17} />
-          </a>
+          </Link>
         </div>
       )}
     </header>
